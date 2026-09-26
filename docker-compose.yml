@@ -1,55 +1,112 @@
 services:
+
   mariadb:
     image: mariadb:10.8
-    restart: always
+
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
-      - --skip-innodb-read-only-compressed
+
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
     volumes:
       - mariadb-data:/var/lib/mysql
+
     networks:
       - erpnext-network
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "healthcheck.sh",
+          "--connect",
+          "--innodb_initialized"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
 
   redis:
     image: redis:alpine
-    restart: always
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+
+    volumes:
+      - redis-data:/data
+
     networks:
       - erpnext-network
 
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+
   frappe:
-    build: .
-    user: root # Runs init.sh as root, then bench commands switch to frappe user
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    user: root
+
     working_dir: /home/frappe
+
     env_file:
-      - ./.env
+      - .env
+
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required in .env}
-      - FRAPPE_ADMIN_PASSWORD=${FRAPPE_ADMIN_PASSWORD:?FRAPPE_ADMIN_PASSWORD is required in .env}
-      - FRAPPE_SITE_NAME=${FRAPPE_SITE_NAME:?FRAPPE_SITE_NAME is required in .env}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is required in .env}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is required in .env}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:?AWS_DEFAULT_REGION is required in .env}
-      - S3_BACKUP_URL=${S3_BACKUP_URL:?S3_BACKUP_URL is required in .env}
-      - SHELL=/bin/bash
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      FRAPPE_ADMIN_PASSWORD: ${FRAPPE_ADMIN_PASSWORD}
+
+      FRAPPE_SITE_NAME: ${FRAPPE_SITE_NAME:-erp.loc.test.waqf.gov.ly}
+      FRAPPE_INTERNAL_PORT: ${FRAPPE_INTERNAL_PORT:-8800}
+
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      S3_BACKUP_URL: ${S3_BACKUP_URL:-}
+
+      SHELL: /bin/bash
+
     volumes:
-      - .:/workspace # Mount current directory for easy access if needed, optional
-      - frappe-data:/home/frappe # Persists /home/frappe (includes bench and sites)
-    ports: # Make sure FRAPPE_CONTAINER_PORT in .env matches FRAPPE_INTERNAL_PORT in env.config
-      - "${FRAPPE_HOST_PORT:?FRAPPE_HOST_PORT is required}:${FRAPPE_CONTAINER_PORT:?FRAPPE_CONTAINER_PORT is required}"
-      - "${SOCKETIO_HOST_PORT:-9000}:${SOCKETIO_CONTAINER_PORT:-9000}" # For socket.io
+      - .:/workspace
+      - frappe-data:/home/frappe
+
+    ports:
+      - "8800:8800"
+      - "9000:9000"
+
     networks:
       - erpnext-network
+
     depends_on:
-      - mariadb
-      - redis
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+
 
 volumes:
   mariadb-data:
+  redis-data:
   frappe-data:
+
 
 networks:
   erpnext-network:
