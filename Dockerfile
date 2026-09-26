@@ -1,4 +1,4 @@
-FROM frappe/bench:latest
+FROM frappe/bench:v5.31.0
 
 USER root
 
@@ -6,7 +6,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     git \
-    python3-pip \
     python3-dev \
     python3-setuptools \
     python3-venv \
@@ -21,8 +20,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g yarn
-
-RUN pip3 install --no-cache-dir frappe-bench honcho
 
 COPY init.sh /usr/local/bin/init.sh
 COPY apps.txt /home/frappe/apps.txt
