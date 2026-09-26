@@ -10,6 +10,7 @@ services:
 
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
 
     volumes:
       - mariadb-data:/var/lib/mysql
@@ -18,17 +19,11 @@ services:
       - erpnext-network
 
     healthcheck:
-      test:
-        [
-          "CMD",
-          "healthcheck.sh",
-          "--connect",
-          "--innodb_initialized"
-        ]
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 12
+      start_period: 60s
 
 
   redis:
@@ -71,10 +66,11 @@ services:
 
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       FRAPPE_ADMIN_PASSWORD: ${FRAPPE_ADMIN_PASSWORD}
 
       FRAPPE_SITE_NAME: ${FRAPPE_SITE_NAME:-erp.loc.test.waqf.gov.ly}
-      FRAPPE_INTERNAL_PORT: ${FRAPPE_INTERNAL_PORT:-8800}
+      FRAPPE_INTERNAL_PORT: ${FRAPPE_CONTAINER_PORT:-8800}
 
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
@@ -87,8 +83,9 @@ services:
       - frappe-data:/home/frappe
 
     ports:
-      - "8800:8800"
-      - "9000:9000"
+      # تم ربط المنافذ بملف .env لتجنب التعارض مع مشروعك الآخر
+      - "${FRAPPE_HOST_PORT:-8801}:${FRAPPE_CONTAINER_PORT:-8800}"
+      - "${SOCKETIO_HOST_PORT:-9001}:${SOCKETIO_CONTAINER_PORT:-9000}"
 
     networks:
       - erpnext-network
