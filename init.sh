@@ -15,13 +15,34 @@ FRAPPE_INTERNAL_PORT="${FRAPPE_INTERNAL_PORT:-8000}"
 
 BENCH_DIR="/home/frappe/frappe-bench"
 
-echo "=========================================="
-echo " Frappe / ERPNext Version 15"
-echo "=========================================="
-echo "Site: ${FRAPPE_SITE_NAME}"
-echo "Port: ${FRAPPE_INTERNAL_PORT}"
-echo "Bench: ${BENCH_DIR}"
-echo "=========================================="
+# ==========================================================
+# FIXED VERSIONS
+# ==========================================================
+
+FRAPPE_COMMIT="4fa1b14"
+ERPNext_COMMIT="26f0687"
+HRMS_COMMIT="2238ff6"
+BUILDER_COMMIT="34ee4ee"
+
+# ==========================================================
+# START
+# ==========================================================
+
+echo ""
+echo "=========================================================="
+echo " Frappe / ERPNext Docker"
+echo " FIXED VERSION 15 ENVIRONMENT"
+echo "=========================================================="
+echo "Site:              ${FRAPPE_SITE_NAME}"
+echo "Port:              ${FRAPPE_INTERNAL_PORT}"
+echo "Bench:             ${BENCH_DIR}"
+echo ""
+echo "Frappe commit:     ${FRAPPE_COMMIT}"
+echo "ERPNext commit:    ${ERPNext_COMMIT}"
+echo "HRMS commit:       ${HRMS_COMMIT}"
+echo "Builder commit:    ${BUILDER_COMMIT}"
+echo "=========================================================="
+echo ""
 
 mkdir -p /home/frappe
 
@@ -29,13 +50,13 @@ chown -R frappe:frappe /home/frappe
 
 cd /home/frappe
 
-# --------------------------------------------------
-# 1. Create Frappe Bench - VERSION 15
-# --------------------------------------------------
+# ==========================================================
+# 1. CREATE BENCH
+# ==========================================================
 
 if [ ! -d "${BENCH_DIR}/apps/frappe" ]; then
 
-    echo "Creating Frappe Bench using VERSION 15..."
+    echo ">>> Creating Frappe Bench..."
 
     bench init \
         --skip-redis-config-generation \
@@ -44,73 +65,87 @@ if [ ! -d "${BENCH_DIR}/apps/frappe" ]; then
 
 else
 
-    echo "Existing Frappe Bench detected."
+    echo ">>> Existing Bench detected."
 
 fi
 
 cd "${BENCH_DIR}"
 
-# --------------------------------------------------
-# 2. Verify Frappe version / branch
-# --------------------------------------------------
+# ==========================================================
+# 2. FORCE FRAPPE COMMIT
+# ==========================================================
 
 echo ""
-echo "Checking Frappe installation..."
+echo ">>> Locking Frappe to commit ${FRAPPE_COMMIT}..."
 
-if [ ! -d "apps/frappe" ]; then
-    echo "ERROR: Frappe was not installed."
-    exit 1
-fi
+cd apps/frappe
 
-FRAPPE_VERSION=$(python -c "
+git fetch --depth 1 origin "${FRAPPE_COMMIT}" || true
+
+git checkout --force "${FRAPPE_COMMIT}"
+
+cd "${BENCH_DIR}"
+
+# ==========================================================
+# 3. VERIFY FRAPPE
+# ==========================================================
+
+echo ""
+echo ">>> Verifying Frappe..."
+
+FRAPPE_VERSION=$(./env/bin/python -c "
 import sys
 sys.path.insert(0, 'apps')
 import frappe
 print(frappe.__version__)
 ")
 
-echo "Installed Frappe version: ${FRAPPE_VERSION}"
+FRAPPE_GIT_COMMIT=$(git -C apps/frappe rev-parse HEAD)
+
+echo "Frappe version: ${FRAPPE_VERSION}"
+echo "Frappe commit:  ${FRAPPE_GIT_COMMIT}"
 
 case "${FRAPPE_VERSION}" in
     15.*)
-        echo "OK: Frappe Version 15 detected."
+        echo "OK: Frappe Version 15"
         ;;
     *)
+        echo ""
         echo "ERROR: Frappe is NOT Version 15."
-        echo "Detected version: ${FRAPPE_VERSION}"
+        echo "Detected: ${FRAPPE_VERSION}"
         exit 1
         ;;
 esac
 
-# --------------------------------------------------
-# 3. MariaDB configuration
-# --------------------------------------------------
+# ==========================================================
+# 4. MARIADB
+# ==========================================================
 
 echo ""
-echo "Configuring MariaDB..."
+echo ">>> Configuring MariaDB..."
 
 bench set-config -g db_host mariadb
 bench set-config -g db_port 3306
 
-# --------------------------------------------------
-# 4. Redis configuration
-# --------------------------------------------------
+# ==========================================================
+# 5. REDIS
+# ==========================================================
 
 echo ""
-echo "Configuring Redis..."
+echo ">>> Configuring Redis..."
 
 bench set-config -g redis_cache "redis://redis:6379"
 bench set-config -g redis_queue "redis://redis:6379"
 bench set-config -g redis_socketio "redis://redis:6379"
 
-# --------------------------------------------------
-# 5. Get ERPNext VERSION 15
-# --------------------------------------------------
+# ==========================================================
+# 6. ERPNext
+# ==========================================================
 
-if [ ! -d "apps/erpnext" ]; then
+if [ ! -d "${BENCH_DIR}/apps/erpnext" ]; then
 
     echo ""
-    echo "Downloading ERPNext VERSION 15..."
+    echo ">>> Downloading ERPNext..."
 
     bench get-app \
         --branch version-15 \
@@ -119,18 +154,24 @@ if [ ! -d "apps/erpnext" ]; then
 
 else
 
-    echo "ERPNext already exists."
+    echo ""
+    echo ">>> ERPNext already exists."
 
 fi
 
-# --------------------------------------------------
-# 6. Get HRMS VERSION 15
-# --------------------------------------------------
+echo ">>> Locking ERPNext to ${ERPNext_COMMIT}..."
 
-if [ ! -d "apps/hrms" ]; then
+git -C apps/erpnext fetch --depth 1 origin "${ERPNext_COMMIT}" || true
+git -C apps/erpnext checkout --force "${ERPNext_COMMIT}"
+
+# ==========================================================
+# 7. HRMS
+# ==========================================================
+
+if [ ! -d "${BENCH_DIR}/apps/hrms" ]; then
 
     echo ""
-    echo "Downloading HRMS VERSION 15..."
+    echo ">>> Downloading HRMS..."
 
     bench get-app \
         --branch version-15 \
@@ -139,38 +180,59 @@ if [ ! -d "apps/hrms" ]; then
 
 else
 
-    echo "HRMS already exists."
+    echo ""
+    echo ">>> HRMS already exists."
 
 fi
 
-# --------------------------------------------------
-# 7. Get Builder VERSION 15
-# --------------------------------------------------
+echo ">>> Locking HRMS to ${HRMS_COMMIT}..."
 
-if [ ! -d "apps/builder" ]; then
+git -C apps/hrms fetch --depth 1 origin "${HRMS_COMMIT}" || true
+git -C apps/hrms checkout --force "${HRMS_COMMIT}"
+
+# ==========================================================
+# 8. BUILDER
+# ==========================================================
+
+if [ ! -d "${BENCH_DIR}/apps/builder" ]; then
 
     echo ""
-    echo "Downloading Builder VERSION 15..."
+    echo ">>> Downloading Builder..."
 
     bench get-app \
-        --branch version-15 \
+        --branch master \
         builder \
         https://github.com/frappe/builder.git
 
 else
 
-    echo "Builder already exists."
+    echo ""
+    echo ">>> Builder already exists."
 
 fi
 
-# --------------------------------------------------
-# 8. Create Site
-# --------------------------------------------------
+echo ">>> Locking Builder to ${BUILDER_COMMIT}..."
 
-if [ ! -d "sites/${FRAPPE_SITE_NAME}" ]; then
+git -C apps/builder fetch --depth 1 origin "${BUILDER_COMMIT}" || true
+git -C apps/builder checkout --force "${BUILDER_COMMIT}"
+
+# ==========================================================
+# 9. INSTALL DEPENDENCIES
+# ==========================================================
+
+echo ""
+echo ">>> Installing Python dependencies..."
+
+bench setup requirements
+
+# ==========================================================
+# 10. CREATE SITE
+# ==========================================================
+
+if [ ! -d "${BENCH_DIR}/sites/${FRAPPE_SITE_NAME}" ]; then
 
     echo ""
-    echo "Creating site: ${FRAPPE_SITE_NAME}"
+    echo ">>> Creating site: ${FRAPPE_SITE_NAME}"
 
     bench new-site "${FRAPPE_SITE_NAME}" \
         --db-host mariadb \
@@ -181,88 +243,100 @@ if [ ! -d "sites/${FRAPPE_SITE_NAME}" ]; then
 
 else
 
-    echo "Site already exists: ${FRAPPE_SITE_NAME}"
+    echo ""
+    echo ">>> Site already exists."
 
 fi
 
-# --------------------------------------------------
-# 9. Install ERPNext
-# --------------------------------------------------
+# ==========================================================
+# 11. INSTALL ERPNext
+# ==========================================================
 
 if ! bench --site "${FRAPPE_SITE_NAME}" list-apps | grep -q "^erpnext"; then
 
     echo ""
-    echo "Installing ERPNext..."
+    echo ">>> Installing ERPNext..."
 
     bench --site "${FRAPPE_SITE_NAME}" install-app erpnext
 
 fi
 
-# --------------------------------------------------
-# 10. Install HRMS
-# --------------------------------------------------
+# ==========================================================
+# 12. INSTALL HRMS
+# ==========================================================
 
 if ! bench --site "${FRAPPE_SITE_NAME}" list-apps | grep -q "^hrms"; then
 
     echo ""
-    echo "Installing HRMS..."
+    echo ">>> Installing HRMS..."
 
     bench --site "${FRAPPE_SITE_NAME}" install-app hrms
 
 fi
 
-# --------------------------------------------------
-# 11. Install Builder
-# --------------------------------------------------
+# ==========================================================
+# 13. INSTALL BUILDER
+# ==========================================================
 
 if ! bench --site "${FRAPPE_SITE_NAME}" list-apps | grep -q "^builder"; then
 
     echo ""
-    echo "Installing Builder..."
+    echo ">>> Installing Builder..."
 
     bench --site "${FRAPPE_SITE_NAME}" install-app builder
 
 fi
 
-# --------------------------------------------------
-# 12. Developer mode
-# --------------------------------------------------
+# ==========================================================
+# 14. DEVELOPER MODE
+# ==========================================================
 
 echo ""
-echo "Enabling developer mode..."
+echo ">>> Enabling developer mode..."
 
 bench --site "${FRAPPE_SITE_NAME}" set-config developer_mode 1
 
-# --------------------------------------------------
-# 13. Clear cache
-# --------------------------------------------------
+# ==========================================================
+# 15. SERVER SCRIPTS
+# ==========================================================
+
+bench --site "${FRAPPE_SITE_NAME}" set-config server_script_enabled 1
+
+# ==========================================================
+# 16. CLEAR CACHE
+# ==========================================================
 
 echo ""
-echo "Clearing cache..."
+echo ">>> Clearing cache..."
 
 bench --site "${FRAPPE_SITE_NAME}" clear-cache
 bench --site "${FRAPPE_SITE_NAME}" clear-website-cache
 
-# --------------------------------------------------
-# 14. Set default site
-# --------------------------------------------------
+# ==========================================================
+# 17. DEFAULT SITE
+# ==========================================================
 
 bench use "${FRAPPE_SITE_NAME}"
 
-# --------------------------------------------------
-# 15. Generate supervisor configuration
-# --------------------------------------------------
+# ==========================================================
+# 18. BUILD ASSETS
+# ==========================================================
 
 echo ""
-echo "Generating Supervisor configuration..."
+echo ">>> Building assets..."
+
+bench build
+
+# ==========================================================
+# 19. SUPERVISOR
+# ==========================================================
+
+echo ""
+echo ">>> Generating Supervisor configuration..."
 
 bench setup supervisor --skip-redis
 
-# --------------------------------------------------
-# 16. Change web port
-# --------------------------------------------------
-
-SUPERVISOR_CONF="/home/frappe/frappe-bench/config/supervisor.conf"
+SUPERVISOR_CONF="${BENCH_DIR}/config/supervisor.conf"
 
 if [ -f "${SUPERVISOR_CONF}" ]; then
 
@@ -272,14 +346,14 @@ if [ -f "${SUPERVISOR_CONF}" ]; then
 
 fi
 
-# --------------------------------------------------
-# 17. Final verification
-# --------------------------------------------------
+# ==========================================================
+# 20. FINAL VERIFICATION
+# ==========================================================
 
 echo ""
-echo "=========================================="
-echo " FINAL VERSION CHECK"
-echo "=========================================="
+echo "=========================================================="
+echo " FINAL VERSION VERIFICATION"
+echo "=========================================================="
 
 bench version
 
@@ -288,9 +362,23 @@ echo "Installed applications:"
 bench --site "${FRAPPE_SITE_NAME}" list-apps
 
 echo ""
-echo "=========================================="
-echo " Starting Supervisor"
-echo "=========================================="
+echo "Git commits:"
+echo "Frappe:"
+git -C apps/frappe rev-parse HEAD
+
+echo "ERPNext:"
+git -C apps/erpnext rev-parse HEAD
+
+echo "HRMS:"
+git -C apps/hrms rev-parse HEAD
+
+echo "Builder:"
+git -C apps/builder rev-parse HEAD
+
+echo ""
+echo "=========================================================="
+echo " STARTING SUPERVISOR"
+echo "=========================================================="
 
 exec supervisord \
     -n \
