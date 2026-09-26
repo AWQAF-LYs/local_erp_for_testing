@@ -57,7 +57,7 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    user: root
+    user: frappe
 
     working_dir: /home/frappe
 
